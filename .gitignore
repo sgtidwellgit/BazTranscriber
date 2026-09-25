@@ -1,0 +1,14 @@
+whisper_env/
+__pycache__/
+*.pyc
+transcripts/
+.gradio/
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
