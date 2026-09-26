@@ -1,20 +1,16 @@
 """Gradio UI for transcribing audio/video files with OpenAI Whisper."""
 
-import importlib
+import contextlib
 import logging
+import queue
+import threading
 import time
-import tqdm as tqdm_module
 from datetime import datetime
 from pathlib import Path
 
 import gradio as gr
 import whisper
 from whisper.utils import get_writer
-
-# whisper/__init__.py re-exports a `transcribe` function that shadows the
-# `whisper.transcribe` submodule attribute, so grab the real module via
-# importlib rather than `import whisper.transcribe as ...`.
-whisper_transcribe = importlib.import_module("whisper.transcribe")
 
 MODEL_SIZES = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
 OUTPUT_FORMATS = ["txt", "srt", "vtt", "tsv", "json"]
@@ -38,23 +34,22 @@ def get_model(model_size: str, device: str):
     return _loaded_models[key]
 
 
-def _make_progress_tqdm(progress, logger, file_logger):
-    """tqdm subclass that relays Whisper's internal frame-count progress to Gradio and a log file."""
+class _QueueWriter:
+    """File-like object that captures Whisper's verbose per-segment print() lines into a queue."""
 
-    class ProgressTqdm(tqdm_module.tqdm):
-        _last_logged_pct = -1
+    def __init__(self, line_queue):
+        self._queue = line_queue
+        self._buf = ""
 
-        def update(self, n=1):
-            super().update(n)
-            if self.total:
-                frac = min(self.n / self.total, 1.0)
-                progress(0.2 + frac * 0.75, desc=f"Transcribing... {frac * 100:.0f}%")
-                pct = int(frac * 100)
-                if pct != self._last_logged_pct and pct % 5 == 0:
-                    ProgressTqdm._last_logged_pct = pct
-                    file_logger.info(f"Transcribe progress: {pct}% ({self.n}/{self.total} frames)")
+    def write(self, s):
+        self._buf += s
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line:
+                self._queue.put(line)
 
-    return ProgressTqdm
+    def flush(self):
+        pass
 
 
 def transcribe(file_path, model_size, language, device, formats, progress=gr.Progress()):
@@ -83,16 +78,37 @@ def transcribe(file_path, model_size, language, device, formats, progress=gr.Pro
         if language and language.lower() != "auto":
             transcribe_kwargs["language"] = language
 
-        progress(0.2, desc="Transcribing...")
         logger.info(f"Transcribing {input_path.name}...")
         transcribe_start = time.monotonic()
 
-        original_tqdm = whisper_transcribe.tqdm.tqdm
-        whisper_transcribe.tqdm.tqdm = _make_progress_tqdm(progress, logger, logger)
-        try:
-            result = model.transcribe(file_path, verbose=False, **transcribe_kwargs)
-        finally:
-            whisper_transcribe.tqdm.tqdm = original_tqdm
+        line_queue = queue.Queue()
+        outcome = {}
+
+        def run_transcribe():
+            try:
+                with contextlib.redirect_stdout(_QueueWriter(line_queue)):
+                    outcome["result"] = model.transcribe(file_path, verbose=True, **transcribe_kwargs)
+            except Exception as exc:
+                outcome["error"] = exc
+            finally:
+                line_queue.put(None)
+
+        worker = threading.Thread(target=run_transcribe, daemon=True)
+        worker.start()
+
+        transcript_lines = []
+        while True:
+            line = line_queue.get()
+            if line is None:
+                break
+            transcript_lines.append(line)
+            logger.info(line)
+            yield "\n".join(transcript_lines), None
+
+        worker.join()
+        if "error" in outcome:
+            raise outcome["error"]
+        result = outcome["result"]
 
         logger.info(f"Transcription finished in {time.monotonic() - transcribe_start:.1f}s")
     finally:
@@ -108,8 +124,7 @@ def transcribe(file_path, model_size, language, device, formats, progress=gr.Pro
         writer(result, str(input_path))
         output_files.append(str(output_dir / f"{input_path.stem}.{fmt}"))
 
-    progress(1.0, desc="Done")
-    return result["text"].strip(), output_files
+    yield result["text"].strip(), output_files
 
 
 with gr.Blocks(title="Baz Transcriber") as demo:

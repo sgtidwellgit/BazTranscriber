@@ -17,11 +17,15 @@ Baz Transcriber is a local, privacy-friendly tool for turning audio and video fi
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
+See [CHANGELOG.md](CHANGELOG.md) for a history of notable changes.
+
 ## Features
 
 - **Runs locally.** Your media files never leave your machine — everything is processed on your own CPU or GPU.
 - **Supports many file types.** Anything [ffmpeg](https://ffmpeg.org/) can decode works as input, including `.mp4`, `.mkv`, `.mov`, `.avi`, `.wav`, `.mp3`, `.m4a`, `.flac`, and `.ogg`.
 - **Two interfaces.** Use the Gradio web app for an interactive, visual workflow, or `transcribe.py` for scripted/automated use.
+- **Live transcript streaming.** The web UI scrolls each transcribed segment onto the screen as Whisper produces it, so you can watch progress in real time instead of waiting on a fixed progress bar.
+- **Timestamped run logs.** Every transcription writes a log file to `logs/` recording model load time, per-segment progress, and total run time — useful for diagnosing a run that looks stuck or slower than expected.
 - **Multiple output formats.** Generate `.txt`, `.srt`, `.vtt`, `.tsv`, and `.json` transcripts in a single run.
 - **GPU accelerated.** Uses CUDA when available for dramatically faster transcription, with a CPU fallback for machines without a compatible GPU.
 - **Configurable model size and language.** Trade off speed against accuracy, and optionally force a specific spoken language instead of relying on auto-detection.
@@ -98,9 +102,9 @@ Gradio will print a local URL (typically `http://127.0.0.1:7860`). Open it in yo
 | **Device** | `cuda` to use your GPU (recommended if available) or `cpu` to run on the processor only. |
 | **Output Formats** | Check which transcript file formats you want written to disk (`txt`, `srt`, `vtt`, `tsv`, `json`). |
 
-Click **Transcribe** to start processing. The first time you use a given model size, Whisper will download its weights, which can take a few minutes depending on your connection. Once complete, the transcript text appears in the **Transcript** box on screen, and the generated files are available for download from the **Download Files** box.
+Click **Transcribe** to start processing. The first time you use a given model size, Whisper will download its weights, which can take a few minutes depending on your connection. Once transcription begins, each segment scrolls into the **Transcript** box on screen as Whisper produces it — there's no separate percentage progress bar, since the growing text is itself the progress indicator. When it finishes, the generated files are available for download from the **Download Files** box.
 
-Generated files are also saved locally to a `transcripts/<filename>/` folder next to `app.py`.
+Generated files are also saved locally to a `transcripts/<filename>/` folder next to `app.py`. A detailed log of each run (model load time, per-segment output, total duration) is written to `logs/`.
 
 The model stays loaded in memory after the first run, so subsequent transcriptions using the same model size and device will start immediately without reloading.
 
@@ -122,8 +126,11 @@ python transcribe.py "path\to\media.mp4" --model large-v3 --language English --d
 | `--device` | `cuda` | Device to run inference on: `cuda` or `cpu`. |
 | `--output-dir` | `transcripts` | Base directory transcripts are written into (a subfolder named after the input file is created inside it). |
 | `--output-format` | `all` | Which format(s) to write: `txt`, `srt`, `vtt`, `tsv`, `json`, or `all` for every format. |
+| `--quiet` | *(off)* | Suppress per-segment console output; only timing/status messages are logged. |
 
 Run `python transcribe.py --help` at any time to see this list from the tool itself.
+
+By default, `transcribe.py` prints each transcribed segment to the terminal as it's produced (same as the underlying Whisper CLI), and writes a timestamped run log to `logs/`.
 
 ### Example
 
@@ -169,7 +176,8 @@ BazTranscriber/
 ├── README.md
 ├── .gitignore
 ├── whisper_env/          # Local virtual environment (not tracked in git)
-└── transcripts/          # Generated output (not tracked in git)
+├── transcripts/          # Generated output (not tracked in git)
+└── logs/                 # Per-run timing/progress logs (not tracked in git)
 ```
 
 ## Troubleshooting
@@ -183,6 +191,8 @@ BazTranscriber/
 **First run is very slow:** This is expected — Whisper downloads the selected model's weights the first time it's used. Subsequent runs with the same model size will be much faster since the weights are cached locally.
 
 **Incorrect language detected:** Set the Language field/`--language` argument explicitly instead of relying on auto-detection, especially for short clips or files with background noise.
+
+**A run looks stuck:** Check the matching file in `logs/` — it records model load time and per-segment progress, so you can confirm whether the run is still advancing rather than frozen.
 
 ## License
 
