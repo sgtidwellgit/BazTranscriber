@@ -1,6 +1,6 @@
 # Baz Transcriber
 
-Baz Transcriber is a local, privacy-friendly tool for turning audio and video files into text transcripts using [OpenAI's Whisper](https://github.com/openai/whisper) speech recognition model. It runs entirely on your own machine — no files are uploaded to any external service — and comes with two ways to use it: a point-and-click web interface built with [Gradio](https://www.gradio.app/), and a traditional command-line script for scripting or batch use.
+Baz Transcriber is a local, privacy-friendly tool for turning audio and video files into text transcripts using [OpenAI's Whisper](https://github.com/openai/whisper) speech recognition model. It runs entirely on your own machine, no files are uploaded to any external service, and comes with two ways to use it: a point-and-click web interface built with [Gradio](https://www.gradio.app/), and a traditional command-line script for scripting or batch use.
 
 ## Table of Contents
 
