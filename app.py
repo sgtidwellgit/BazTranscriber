@@ -124,7 +124,7 @@ def transcribe(file_path, model_size, language, device, formats, progress=gr.Pro
         writer(result, str(input_path))
         output_files.append(str(output_dir / f"{input_path.stem}.{fmt}"))
 
-    yield result["text"].strip(), output_files
+    yield "\n".join(transcript_lines), output_files
 
 
 with gr.Blocks(title="Baz Transcriber") as demo:
